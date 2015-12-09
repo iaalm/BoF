@@ -57,7 +57,7 @@ int main(int argc, char* argv[]){
     for(i = 0;i < n_line;i++)
         points[i].c = random() % n_clusters;
 
-    for(l = 0;p && l < 100;l++){
+    for(l = 0;p && l < 1000;l++){
         sum = 0;
         for(i = 0;i < n_clusters;i++){
             tab[i] = 0;
@@ -98,7 +98,7 @@ int main(int argc, char* argv[]){
                 points[i].c = q;
             }
         }
-        printf("loop %6d: %f\n",l,sum);
+        printf("loop %6d: %f\n",l,sum/n_line);
     }
 
     fp_list = fopen(argv[3], "w");
