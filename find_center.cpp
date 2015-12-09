@@ -31,6 +31,7 @@ int main(int argc, char* argv[]){
         fgets(str, 256, fp_list);
     }
     points = (point*) malloc(sizeof(point) * n_line);
+    printf("total %d lines\n",n_line);
 
     l = 0;
     rewind(fp_list);
@@ -107,6 +108,7 @@ int main(int argc, char* argv[]){
         fprintf(fp_list,"\n");
     }
     fclose(fp_list);
+    delete points;
 
     return 0;
 }
