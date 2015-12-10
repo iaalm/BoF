@@ -42,20 +42,21 @@ int main(int argc, char* argv[]){
     fgets(str, 256, fp_list);
     while(!feof(fp_list)){
         str[strlen(str) - 1] = '\0';
-        q = 0;
         fp_file = fopen(str, "r");
         fscanf(fp_file, "%*d%d", &j);
         for(i = 0;i < j;i++){
             fscanf(fp_file, "%*f%*f%*f%*f%*f");
+            q = 0;
             for(k = 0;k < N_FEATURE;k++){
                 fscanf(fp_file, "%d", &p);
                 q += p;
                 points[l + i].f[k] = sqrtf(p); // sqrt it
             }
             m = sqrtf(q);
-            for(k = 0;k < N_FEATURE;k++){
-                points[l + i].f[k] /= m;        //l2 normal
-            }
+            if(q > 0)
+                for(k = 0;k < N_FEATURE;k++){
+                    points[l + i].f[k] /= m;        //l2 normal
+                }
         }
         l += j;
         fclose(fp_file);
@@ -73,9 +74,11 @@ int main(int argc, char* argv[]){
         fclose(fp_list);
     }
     else{
-        for(i = 0;i < n_clusters;i++)
+        for(i = 0;i < n_clusters;i++){
+            k = random() % n_line;
             for(j = 0;j < N_FEATURE;j++)
-                center[i][j] = random() / (float) RAND_MAX;
+                center[i][j] = points[k].f[j];
+        }
     }
 
     for(l = 0; l < 1000;l++){
@@ -103,7 +106,7 @@ int main(int argc, char* argv[]){
                 points[i].c = q;
             }
         }
-        printf("loop %6d: %f\n",l,sum/n_line);
+        printf("loop %4d: %f\n",l,sum/n_line);
 
         if(!p)
             break;

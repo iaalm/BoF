@@ -31,10 +31,19 @@ int main(int argc, char* argv[]){
         bzero(feature,n_clusters * sizeof(int));
         for(i = 0;i < l;i++){
             fscanf(fp_file, "%*f%*f%*f%*f%*f");
+            q = 0;
             for(k = 0;k < N_FEATURE;k++){
                 fscanf(fp_file, "%d", &p);
+                q += p
                 tf[k] = sqrtf(p); // sqrt it
             }
+            m = sqrtf(q);
+            if(q >= 0.001)
+                for(k = 0;k < N_FEATURE;k++){
+                    tf[k] /= m;
+                }
+
+
             n = INF;   
             for(j = 0; j < n_clusters;j++){
                 m = 0;
