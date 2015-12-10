@@ -19,6 +19,10 @@ int main(int argc, char* argv[]){
     int tab[n_clusters];
     float m, n;
     char str[256];
+    int b_continue = 0;
+
+    if(argc > 4 && strcmp(argv[4],"-c") == 0)
+        b_continue = 1;
 
     FILE *fp_list = fopen(argv[2], "r"), *fp_file;
     fgets(str, 256, fp_list);
@@ -38,13 +42,19 @@ int main(int argc, char* argv[]){
     fgets(str, 256, fp_list);
     while(!feof(fp_list)){
         str[strlen(str) - 1] = '\0';
+        q = 0;
         fp_file = fopen(str, "r");
         fscanf(fp_file, "%*d%d", &j);
         for(i = 0;i < j;i++){
             fscanf(fp_file, "%*f%*f%*f%*f%*f");
             for(k = 0;k < N_FEATURE;k++){
                 fscanf(fp_file, "%d", &p);
+                q += p;
                 points[l + i].f[k] = sqrtf(p); // sqrt it
+            }
+            m = sqrtf(q);
+            for(k = 0;k < N_FEATURE;k++){
+                points[l + i].f[k] /= m;        //l2 normal
             }
         }
         l += j;
@@ -54,29 +64,24 @@ int main(int argc, char* argv[]){
     fclose(fp_list);
 
     //kmeans
-    for(i = 0;i < n_line;i++)
-        points[i].c = random() % n_clusters;
+    if(b_continue){
+        fp_list = fopen(argv[3], "r");
+        for(i = 0;i < n_clusters;i++){
+            for(j = 0;j < N_FEATURE;j++)
+                fscanf(fp_list, "%f",&center[i][j]);
+        }
+        fclose(fp_list);
+    }
+    else{
+        for(i = 0;i < n_clusters;i++)
+            for(j = 0;j < N_FEATURE;j++)
+                center[i][j] = random() / (float) RAND_MAX;
+    }
 
-    for(l = 0;p && l < 1000;l++){
-        sum = 0;
-        for(i = 0;i < n_clusters;i++){
-            tab[i] = 0;
-            for(j = 0; j < N_FEATURE;j++)
-                center[i][j] = 0;
-        }
-        for(i = 0;i < n_line;i++){
-            tab[points[i].c]++;
-            for(j = 0; j < N_FEATURE;j++){
-                center[points[i].c][j] += points[i].f[j];
-            }
-        }
-        for(i = 0;i < n_clusters;i++){
-            for(j = 0; j < N_FEATURE;j++)
-                if(tab[i])
-                    center[i][j] /= tab[i];
-        }
+    for(l = 0; l < 1000;l++){
         // start
         p = 0;
+        sum = 0;
         #pragma omp parallel for private(i,j,k,m,n,q)
         for(i = 0;i < n_line;i++){
             n = INF;   
@@ -99,6 +104,26 @@ int main(int argc, char* argv[]){
             }
         }
         printf("loop %6d: %f\n",l,sum/n_line);
+
+        if(!p)
+            break;
+        //calc center
+        for(i = 0;i < n_clusters;i++){
+            tab[i] = 0;
+            for(j = 0; j < N_FEATURE;j++)
+                center[i][j] = 0;
+        }
+        for(i = 0;i < n_line;i++){
+            tab[points[i].c]++;
+            for(j = 0; j < N_FEATURE;j++){
+                center[points[i].c][j] += points[i].f[j];
+            }
+        }
+        for(i = 0;i < n_clusters;i++){
+            for(j = 0; j < N_FEATURE;j++)
+                if(tab[i])
+                    center[i][j] /= tab[i];
+        }
     }
 
     fp_list = fopen(argv[3], "w");
@@ -110,5 +135,5 @@ int main(int argc, char* argv[]){
     fclose(fp_list);
     delete points;
 
-    return 0;
+    return p;
 }

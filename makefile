@@ -1,5 +1,5 @@
 CXXFLAGS=-fopenmp -O3
-OBJ=find_center find_center_c gen_feature
+OBJ=find_center gen_feature
 all: $(OBJ)
 
 clean:
