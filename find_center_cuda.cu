@@ -23,10 +23,14 @@ struct point{
     int c;
 };
 
-__global__ static void kmeans_cluster(point* points,float (*center)[N_FEATURE], int n_line, int n_clusters, int* p){
-    int i,j,k,q;
+__global__ static void kmeans_cluster(int max_iter, point* points,float (*center)[N_FEATURE], int n_line, int n_clusters, unsigned int *p){
+    int i,j,k,l,q;
     float m,n;
-        for(i = blockIdx.x;i < n_line;i+=gridDim.x){
+    for(l = 0; l < max_iter;l++){
+        if(blockDim.x == 0 && threadIdx.x == 0)
+            *p = 0;
+        __syncthreads();
+        for(i = blockIdx.x * gridDim.x + threadIdx.x;i < n_line;i+=blockDim.x * gridDim.x){
             n = INF;   
             for(j = 0; j < n_clusters;j++){
                 m = 0;
@@ -39,17 +43,14 @@ __global__ static void kmeans_cluster(point* points,float (*center)[N_FEATURE], 
             }
             //sum += n;
             if(q != points[i].c && *p == 0){
-                #pragma omp crititcal
-                {
-                    *p = 1;
-                }
+                atomicAdd(p, 1);
                 points[i].c = q;
             }
         }
-}
-__global__ static void kmeans_center(point* points,float (*center)[N_FEATURE], int n_line, int n_clusters){
-    int i,j,k,n;
-        for(i = blockIdx.x;i < n_clusters;i+=gridDim.x){
+        __syncthreads();
+        if(*p == 0)
+            return ;
+        for(i = blockIdx.x * gridDim.x + threadIdx.x;i < n_clusters;i+=blockDim.x * gridDim.x){
             for(j = 0; j < N_FEATURE;j++)
                 center[i][j] = 0;
             n = 0;
@@ -63,6 +64,7 @@ __global__ static void kmeans_center(point* points,float (*center)[N_FEATURE], i
             for(j = 0; j < N_FEATURE;j++)
                 center[i][j] /= n;
         }
+    }
 }
 
 int main(int argc, char* argv[]){
@@ -137,31 +139,18 @@ int main(int argc, char* argv[]){
     //kmeans
     point* dev_points;
     float (*dev_center)[N_FEATURE];
-    int *dev_p;
+    unsigned int *dev_p;
+    puts("init cuda...");
     HANDLE_ERROR( cudaMalloc( (void**)&dev_center, n_clusters * N_FEATURE * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_points, n_line * sizeof(point) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_p, sizeof(int) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_p, sizeof(unsigned int) ) );
     HANDLE_ERROR( cudaMemcpy( dev_points, points, n_line * sizeof(point), cudaMemcpyHostToDevice ) );
     HANDLE_ERROR( cudaMemcpy( dev_center, center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyHostToDevice ) );
-    for(l = 0; l < 1000;l++){
-        // start
-        // sum = 0
-        p = 0;
-    HANDLE_ERROR( cudaMemcpy( dev_p, &p, sizeof(int), cudaMemcpyHostToDevice ) );
-    kmeans_cluster<<<128,1>>>(dev_points,dev_center,n_line,n_clusters,dev_p);
-    HANDLE_ERROR( cudaMemcpy( &p, dev_p, sizeof(int), cudaMemcpyDeviceToHost ) );
-        //printf("loop %6d: %f\n",l,sum/n_line);
-
-        if(!p)
-            break;
-        //calc center
-    kmeans_center<<<128,1>>>(dev_points,dev_center,n_line,n_clusters);
-    printf("loop %4d: %f\n",l,sum/n_line);
-    }
+    puts("running cuda...");
+    kmeans_cluster<<<1,512>>>(2,dev_points,dev_center,n_line,n_clusters,dev_p);
+    puts("output data...");
     HANDLE_ERROR( cudaMemcpy( center, dev_center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyDeviceToHost ) );
-    HANDLE_ERROR( cudaFree( dev_points ) );
-    HANDLE_ERROR( cudaFree( dev_center ) );
-    HANDLE_ERROR( cudaFree( dev_p ) );
+    puts("writing file...");
 
     fp_list = fopen(argv[3], "w");
     for(i = 0;i < n_clusters;i++){
@@ -169,8 +158,12 @@ int main(int argc, char* argv[]){
             fprintf(fp_list, "%f ",center[i][j]);
         fprintf(fp_list,"\n");
     }
+    puts("free mem");
     fclose(fp_list);
     delete points;
+    HANDLE_ERROR( cudaFree( dev_points ) );
+    HANDLE_ERROR( cudaFree( dev_center ) );
+    HANDLE_ERROR( cudaFree( dev_p ) );
 
     return p;
 }
