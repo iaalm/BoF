@@ -34,7 +34,7 @@ int main(int argc, char* argv[]){
             q = 0;
             for(k = 0;k < N_FEATURE;k++){
                 fscanf(fp_file, "%d", &p);
-                q += p
+                q += p;
                 tf[k] = sqrtf(p); // sqrt it
             }
             m = sqrtf(q);
