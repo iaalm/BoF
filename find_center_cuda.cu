@@ -30,7 +30,9 @@ __global__ static void kmeans_cluster(int max_iter, fv *points,fv *center, int n
             p = 0;
         __syncthreads();
         for(i = blockIdx.x * gridDim.x + threadIdx.x;i < n_line;i+=blockDim.x * gridDim.x){
-            memcpy(tfeature,points[i],sizeof(float)*N_FEATURE);
+            //memcpy(tfeature,points[i],sizeof(float)*N_FEATURE);
+	    for(j = 0; j < N_FEATURE;j++)
+		tfeature[j] = points[i][j];
             n = INF;   
             for(j = 0; j < n_clusters;j++){
                 m = 0;
@@ -64,7 +66,9 @@ __global__ static void kmeans_cluster(int max_iter, fv *points,fv *center, int n
             if(n > 0)
                 for(j = 0; j < N_FEATURE;j++)
                     tfeature[j] /= n;
-            memcpy(center[i],tfeature,sizeof(float)*N_FEATURE);
+            //memcpy(center[i],tfeature,sizeof(float)*N_FEATURE);
+	    for(j = 0; j < N_FEATURE;j++)
+		center[i][j] = tfeature[j];
         }
     }
 }
@@ -146,7 +150,7 @@ int main(int argc, char* argv[]){
     HANDLE_ERROR( cudaMalloc( (void**)&dev_points, n_line * N_FEATURE * sizeof(float) ) );
     HANDLE_ERROR( cudaMemcpy( dev_center, center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyHostToDevice ) );
     HANDLE_ERROR( cudaMemcpy( dev_points, points, n_line * N_FEATURE * sizeof(float), cudaMemcpyHostToDevice ) );
-    kmeans_cluster<<<1,512,n_line * sizeof(float)>>>(2,dev_points,dev_center,n_line,n_clusters);
+    kmeans_cluster<<<1,128,n_line * sizeof(float)>>>(100,dev_points,dev_center,n_line,n_clusters);
     HANDLE_ERROR( cudaMemcpy( center, dev_center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyDeviceToHost ) );
 
     fp_list = fopen(argv[3], "w");
