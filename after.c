@@ -21,7 +21,7 @@ int main(int argc, char *argv[]){
         sum = sqrtf(j);
         for(i = 0;i < n_cluster;i++){
             if(tab[i])
-                printf(" %d:%f", i, tab[i]/sum);
+                printf(" %d:%f", i+1, tab[i]/sum);
         }
         putchar(10);
         fscanf(fp, "%s", str);
