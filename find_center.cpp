@@ -2,10 +2,16 @@
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
+#include<signal.h>
 
 #define INF (64 * 64 * 128 * 2)
 #define N_FEATURE (128)
 
+int signal_flag;
+void handle_signal(int){
+    fprintf(stderr, "get signal\n");
+    signal_flag = 0;
+}
 struct point{
     float f[N_FEATURE];
     int c;
@@ -20,6 +26,8 @@ int main(int argc, char* argv[]){
     float m, n;
     char str[256];
     int b_continue = 0;
+    signal_flag = 1;
+    signal(SIGINT, handle_signal);
 
     if(argc > 4 && strcmp(argv[4],"-c") == 0)
         b_continue = 1;
@@ -108,7 +116,7 @@ int main(int argc, char* argv[]){
         }
         printf("loop %4d: %f\n",l,sum/n_line);
 
-        if(!p)
+        if(!signal_flag || !p)
             break;
         //calc center
         for(i = 0;i < n_clusters;i++){
