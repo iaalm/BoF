@@ -1,10 +1,13 @@
 CXXFLAGS=-fopenmp -O3
 LDFLAGS=-lm
-OBJ=find_center find_center_cuda gen_feature after
+OBJ=find_center find_center_mpi find_center_cuda gen_feature after
 all: $(OBJ)
 
 find_center_cuda:find_center_cuda.cu
-	nvcc -arch=sm_12 $^ -o $@ 
+	nvcc -arch=sm_50 $^ -o $@ 
+
+find_center_mpi:find_center_mpi.cpp
+	mpic++ -O3 $^ -o $@ 
 
 clean:
 	rm -f $(OBJ)

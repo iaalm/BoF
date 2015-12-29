@@ -1,6 +1,6 @@
 #include<stdio.h>
 #include<stdlib.h>
-#include<string.h>
+//#include<string.h>
 #include<math.h>
 #include<cuda_runtime.h>
 
@@ -9,8 +9,8 @@
 typedef float fv[N_FEATURE];
 
 static void HandleError( cudaError_t err,
-                         const char *file,
-                         int line ) {
+        const char *file,
+        int line ) {
     if (err != cudaSuccess) {
         printf( "%s in %s at line %d\n", cudaGetErrorString( err ),
                 file, line );
@@ -21,18 +21,18 @@ static void HandleError( cudaError_t err,
 
 __global__ static void kmeans_cluster(int max_iter, fv *points,fv *center, int n_line, int n_clusters){
     int i,j,k,l,q;
-    __shared__ unsigned int p;
     extern __shared__ unsigned int cluster[];
+    __shared__ int p;
     float m,n;
     fv tfeature;
     for(l = 0; l < max_iter;l++){
-        if(blockDim.x == 0 && threadIdx.x == 0)
+        if(threadIdx.x == 0)
             p = 0;
         __syncthreads();
-        for(i = blockIdx.x * gridDim.x + threadIdx.x;i < n_line;i+=blockDim.x * gridDim.x){
+        for(i = threadIdx.x;i < n_line;i+=blockDim.x){
             //memcpy(tfeature,points[i],sizeof(float)*N_FEATURE);
-	    for(j = 0; j < N_FEATURE;j++)
-		tfeature[j] = points[i][j];
+            for(j = 0; j < N_FEATURE;j++)
+                tfeature[j] = points[i][j];
             n = INF;   
             for(j = 0; j < n_clusters;j++){
                 m = 0;
@@ -44,15 +44,18 @@ __global__ static void kmeans_cluster(int max_iter, fv *points,fv *center, int n
                 }
             }
             //sum += n;
-            if(q != cluster[i] && p == 0){
-                atomicAdd(&p, 1);
+            if(q != cluster[i]){
                 cluster[i] = q;
+                if(p == 0)
+                    atomicAdd(&p, 1);
+
             }
         }
         __syncthreads();
-        if(p == 0)
+        if(p == 0){
             return ;
-        for(i = blockIdx.x * gridDim.x + threadIdx.x;i < n_clusters;i+=blockDim.x * gridDim.x){
+        }
+        for(i = threadIdx.x;i < n_clusters;i+=blockDim.x){
             for(j = 0; j < N_FEATURE;j++)
                 tfeature[j] = 0;
             n = 0;
@@ -66,9 +69,11 @@ __global__ static void kmeans_cluster(int max_iter, fv *points,fv *center, int n
             if(n > 0)
                 for(j = 0; j < N_FEATURE;j++)
                     tfeature[j] /= n;
+            //really need else to add point
+            tfeature[0] = n;
             //memcpy(center[i],tfeature,sizeof(float)*N_FEATURE);
-	    for(j = 0; j < N_FEATURE;j++)
-		center[i][j] = tfeature[j];
+            for(j = 0; j < N_FEATURE;j++)
+                center[i][j] = tfeature[j];
         }
     }
 }
@@ -150,7 +155,8 @@ int main(int argc, char* argv[]){
     HANDLE_ERROR( cudaMalloc( (void**)&dev_points, n_line * N_FEATURE * sizeof(float) ) );
     HANDLE_ERROR( cudaMemcpy( dev_center, center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyHostToDevice ) );
     HANDLE_ERROR( cudaMemcpy( dev_points, points, n_line * N_FEATURE * sizeof(float), cudaMemcpyHostToDevice ) );
-    kmeans_cluster<<<1,128,n_line * sizeof(float)>>>(100,dev_points,dev_center,n_line,n_clusters);
+    puts("running cuda.");
+    kmeans_cluster<<<1,2,n_line * sizeof(float)>>>(1000,dev_points,dev_center,n_line,n_clusters);
     HANDLE_ERROR( cudaMemcpy( center, dev_center, n_clusters * N_FEATURE * sizeof(float), cudaMemcpyDeviceToHost ) );
 
     fp_list = fopen(argv[3], "w");
@@ -160,7 +166,7 @@ int main(int argc, char* argv[]){
         fprintf(fp_list,"\n");
     }
     fclose(fp_list);
-    delete points;
+    free(points);
     HANDLE_ERROR( cudaFree( dev_points ) );
     HANDLE_ERROR( cudaFree( dev_center ) );
 

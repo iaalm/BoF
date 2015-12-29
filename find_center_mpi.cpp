@@ -3,6 +3,7 @@
 #include<string.h>
 #include<math.h>
 #include<signal.h>
+#include<mpi.h>
 
 #define INF (64 * 64 * 128 * 2)
 #define N_FEATURE (128)
@@ -23,32 +24,47 @@ int main(int argc, char* argv[]){
     float center[n_clusters][N_FEATURE];
     int n_line = 0, i, j, k, l, p, q;
     int tab[n_clusters];
+    float gcenter[n_clusters][N_FEATURE];
+    int gtab[n_clusters];
     float m, n;
     char str[256];
     int b_continue = 0;
+    int gn_line;
     signal_flag = 1;
     signal(SIGINT, handle_signal);
 
     if(argc > 4 && strcmp(argv[4],"-c") == 0)
         b_continue = 1;
+    MPI_Init(&argc,&argv);
+    int mpi_size, mpi_rank,mcount=0;
+    MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
 
     FILE *fp_list = fopen(argv[2], "r"), *fp_file;
     fgets(str, 256, fp_list);
     while(!feof(fp_list)){
-        str[strlen(str) - 1] = '\0';
-        fp_file = fopen(str, "r");
-        fscanf(fp_file, "%*d%d", &j);
-        n_line += j;
-        fclose(fp_file);
+        if(mcount %mpi_size == mpi_rank){
+            str[strlen(str) - 1] = '\0';
+            fp_file = fopen(str, "r");
+            fscanf(fp_file, "%*d%d", &j);
+            n_line += j;
+            fclose(fp_file);
+        }
         fgets(str, 256, fp_list);
+        mcount++;
     }
     points = (point*) malloc(sizeof(point) * n_line);
-    printf("total %d lines\n",n_line);
+    printf("thread %d get total %d lines\n",mpi_rank,n_line);
+    MPI_Reduce(&n_line, &gn_line, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if(!mpi_rank)
+        printf("total %d lines\n", gn_line);
 
     l = 0;
+    mcount = 0;
     rewind(fp_list);
     fgets(str, 256, fp_list);
     while(!feof(fp_list)){
+        if(mcount %mpi_size == mpi_rank){
         str[strlen(str) - 1] = '\0';
         fp_file = fopen(str, "r");
         fscanf(fp_file, "%*d%d", &j);
@@ -68,32 +84,37 @@ int main(int argc, char* argv[]){
         }
         l += j;
         fclose(fp_file);
+        }
         fgets(str, 256, fp_list);
+        mcount++;
     }
     fclose(fp_list);
 
     //kmeans
-    if(b_continue){
-        fp_list = fopen(argv[3], "r");
-        for(i = 0;i < n_clusters;i++){
-            for(j = 0;j < N_FEATURE;j++)
-                fscanf(fp_list, "%f",&center[i][j]);
+    if(!mpi_rank){
+        if(b_continue){
+            fp_list = fopen(argv[3], "r");
+            for(i = 0;i < n_clusters;i++){
+                for(j = 0;j < N_FEATURE;j++)
+                    fscanf(fp_list, "%f",&center[i][j]);
+            }
+            fclose(fp_list);
         }
-        fclose(fp_list);
-    }
-    else{
-        for(i = 0;i < n_clusters;i++){
-            k = random() % n_line;
-            for(j = 0;j < N_FEATURE;j++)
-                center[i][j] = points[k].f[j];
+        else{
+            for(i = 0;i < n_clusters;i++){
+                k = random() % n_line;
+                for(j = 0;j < N_FEATURE;j++)
+                    center[i][j] = points[k].f[j];
+            }
         }
     }
 
     for(l = 0; l < 1000;l++){
+        //sync center
+        MPI_Bcast(&center, N_FEATURE * n_clusters, MPI_FLOAT, 0,MPI_COMM_WORLD);
         // start
         p = 0;
         sum = 0;
-        #pragma omp parallel for private(i,j,k,m,n,q)
         for(i = 0;i < n_line;i++){
             n = INF;   
             for(j = 0; j < n_clusters;j++){
@@ -107,14 +128,20 @@ int main(int argc, char* argv[]){
             }
             sum += n;
             if(q != points[i].c){
-                #pragma omp crititcal
                 {
                     p = 1;
                 }
                 points[i].c = q;
             }
         }
-        printf("loop %4d: %f\n",l,sum/n_line);
+        //reduce sum and p
+        MPI_Allreduce(&p, &q, 1, MPI_INT, MPI_MAX,  MPI_COMM_WORLD);
+        p = q;
+        MPI_Reduce(&sum, &m, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        sum = m;
+        if(!mpi_rank){
+            printf("loop %4d: %f\n",l,sum/gn_line);
+        }
 
         if(!signal_flag || !p)
             break;
@@ -130,27 +157,36 @@ int main(int argc, char* argv[]){
                 center[points[i].c][j] += points[i].f[j];
             }
         }
-        for(i = 0;i < n_clusters;i++){
-            if(tab[i])
-                for(j = 0; j < N_FEATURE;j++)
-                    center[i][j] /= tab[i];
-            else {
-                printf("empty center\n");
-                k = random() % n_line;
-                for(j = 0;j < N_FEATURE;j++)
-                    center[i][j] = points[k].f[j];
+        //reduce center and tab
+        MPI_Reduce(center, gcenter, N_FEATURE * n_clusters, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(tab, gtab, n_clusters, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+        memcpy(tab, gtab, n_clusters * sizeof(int));
+        memcpy(center, gcenter, n_clusters * N_FEATURE * sizeof(float));
+        if(!mpi_rank)
+            for(i = 0;i < n_clusters;i++){
+                if(tab[i])
+                    for(j = 0; j < N_FEATURE;j++)
+                        center[i][j] /= tab[i];
+                else {
+                    printf("empty center\n");
+                    k = random() % n_line;
+                    for(j = 0;j < N_FEATURE;j++)
+                        center[i][j] = points[k].f[j];
+                }
             }
-        }
     }
+    MPI_Finalize();
 
-    fp_list = fopen(argv[3], "w");
-    for(i = 0;i < n_clusters;i++){
-        for(j = 0;j < N_FEATURE;j++)
-            fprintf(fp_list, "%f ",center[i][j]);
-        fprintf(fp_list,"\n");
+    if(!mpi_rank){
+        fp_list = fopen(argv[3], "w");
+        for(i = 0;i < n_clusters;i++){
+            for(j = 0;j < N_FEATURE;j++)
+                fprintf(fp_list, "%f ",center[i][j]);
+            fprintf(fp_list,"\n");
+        }
+        fclose(fp_list);
     }
-    fclose(fp_list);
-    delete points;
+    free(points);
 
     return p;
 }
