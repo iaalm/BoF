@@ -34,7 +34,7 @@ cat tname >> aname
 $PWD/BoF_for_TT/find_center $n_cluster aname c_tt
 $PWD/BoF_for_TT/gen_feature $n_cluster fname c_tt > f_tt
 $PWD/BoF_for_TT/gen_feature $n_cluster tname c_tt > t_tt
-python3 $PWD/BoF_for_TT/find_close_batch.py f_tt t_tt| grep -oP '(?<=第)\d*(?=帧)|0\.\d*' | sed 'N;N;s/\n/\t/g' | sort -n | unix2dos > $outfile
+python3 $PWD/BoF_for_TT/find_close_batch.py f_tt t_tt| grep -oP '(?<=第)\d*(?=帧)' | sed 'N;s/\n/\t/g' | sort -n | unix2dos > $outfile
 rm {c,f,t}_tt {t,f,a}name
 exit 0
 
