@@ -22,7 +22,7 @@ if __name__ == '__main__':
         d2 = list(map(lambda t:t.strip("\n").split(' '),d2))
     for i in d1:
         best = 0
-        idx_name = 'unknow'
+        idx_name = '第0帧'
         for j in d2:
             v = cos_dis(i,j)
             if v > best:
